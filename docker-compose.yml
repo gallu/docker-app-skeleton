@@ -1,0 +1,101 @@
+# version: "3.9" # Docker Engine / Plugin と統合され、version を書く必要がなくなった
+
+# ==========================================================
+# docker-app-skeleton
+# 「どんな PHP プロジェクトでも即動く開発環境」を作るための土台。
+# - nginx + php-fpm（Laravel / Slim / PlainPHP 共通）
+# - MySQL（永続化は storage/db）
+# - Redis（セッション・KVS・ジョブキュー向け）
+# ==========================================================
+
+services:
+
+  # --------------------------------------------------------
+  # Web サーバ（nginx）
+  # --------------------------------------------------------
+  nginx:
+    # docker/nginx/Dockerfile を使用
+    build: ./docker/nginx
+
+    # "localhost:8080" → "コンテナ内の 80 番" に接続
+    ports:
+      - "8080:80"
+
+    # src/ が Web ルート（/var/www/html）としてマウントされる
+    # public/ がサーバルートになる（default.conf の指定）
+    volumes:
+      - ./src:/var/www/html
+
+    # PHP が先に起動していてほしいので depends_on
+    depends_on:
+      - php
+
+    networks:
+      - appnet
+
+
+  # --------------------------------------------------------
+  # PHP 実行環境（php-fpm）
+  # --------------------------------------------------------
+  php:
+    build: ./docker/php
+
+    # アプリ本体を共有（Nginx と同じパス構造で動く）
+    volumes:
+      - ./src:/var/www/html
+
+    networks:
+      - appnet
+
+
+  # --------------------------------------------------------
+  # MySQL 8.0
+  # --------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+
+    # 初期設定（開発用途なので最低限）
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+
+    # 永続化領域。storage/db に実ファイルが置かれる
+    volumes:
+      - ./storage/db:/var/lib/mysql
+
+    # ※ 3306 を外に公開しておくと、TablePlus / Workbench などから接続できる
+    # （不要ならコメントアウト）
+    ports:
+      - "3306:3306"
+
+    networks:
+      - appnet
+
+
+  # --------------------------------------------------------
+  # Redis（KVS / キャッシュ）
+  # --------------------------------------------------------
+  redis:
+    image: redis:7
+
+    # appendonly=no で軽量モード（開発向け）
+    command: ["redis-server", "--appendonly", "no"]
+
+    # 必要なら Redis を外から叩けるようにする
+    # （セキュリティの観点では不要なら閉じる）
+    ports:
+      - "6379:6379"
+
+    networks:
+      - appnet
+
+
+# --------------------------------------------------------
+# アプリケーション専用のネットワーク
+# --------------------------------------------------------
+networks:
+  appnet:
+    driver: bridge
+

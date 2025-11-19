@@ -1,0 +1,13 @@
+{
+    "name": "gallu/docker-app-skeleton",
+    "description": "Docker-based PHP application development skeleton.",
+    "type": "project",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "authors": [
+    {
+        "name": "Michiaki Furusho"
+    }
+}
+
