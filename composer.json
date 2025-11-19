@@ -6,8 +6,9 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "authors": [
-    {
-        "name": "Michiaki Furusho"
-    }
+        {
+            "name": "Michiaki Furusho"
+        }
+    ]
 }
 
