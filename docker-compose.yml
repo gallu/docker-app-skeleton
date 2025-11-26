@@ -66,9 +66,8 @@ services:
       - ./storage/db:/var/lib/mysql
 
     # ※ 3306 を外に公開しておくと、TablePlus / Workbench などから接続できる
-    # （不要ならコメントアウト）
-    ports:
-      - "3306:3306"
+    # ports:
+    #   - "3306:3306"   # ← デフォルトでは閉じておく
 
     networks:
       - appnet
