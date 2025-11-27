@@ -1,4 +1,4 @@
-.PHONY: up down clean all-clean disintegrate
+.PHONY: up down clean exec-php exec-mysql ps logs all-clean disintegrate
 
 up:
 	docker compose up -d --build
@@ -9,6 +9,22 @@ down:
 # プロジェクト専用クリーン（最も安全）
 clean:
 	docker compose down --rmi local --volumes
+
+# Exec into app container
+exec-php:
+	docker compose exec php bash
+
+# Exec into mysql container
+exec-mysql:
+	docker compose exec mysql bash
+
+# Show container process list
+ps:
+	docker compose ps
+
+# Tail logs for all services
+logs:
+	docker compose logs -f
 
 # Docker 全域の軽めクリーン
 all-clean:
