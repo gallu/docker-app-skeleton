@@ -4,7 +4,7 @@
 # docker-app-skeleton
 # 「どんな PHP プロジェクトでも即動く開発環境」を作るための土台。
 # - nginx + php-fpm（Laravel / Slim / PlainPHP 共通）
-# - MySQL（永続化は storage/db）
+# - MySQL（永続化は named volume mysql_data）
 # - Redis（セッション・KVS・ジョブキュー向け）
 # ==========================================================
 
@@ -17,9 +17,10 @@ services:
     # docker/nginx/Dockerfile を使用
     build: ./docker/nginx
 
-    # "localhost:8080" → "コンテナ内の 80 番" に接続
+    # "localhost:${WEB_PORT}" → "コンテナ内の 80 番" に接続
+    # WEB_PORT は .env で必須（未設定ならエラー）
     ports:
-      - "8080:80"
+      - "${WEB_PORT:?WEB_PORT is not set. Copy .env.sample to .env}:80"
 
     # src/ が Web ルート（/var/www/html）としてマウントされる
     # public/ がサーバルートになる（default.conf の指定）
@@ -44,6 +45,11 @@ services:
     volumes:
       - ./src:/var/www/html
 
+    # MySQL の準備完了（healthcheck）まで待つ
+    depends_on:
+      mysql:
+        condition: service_healthy
+
     networks:
       - appnet
 
@@ -61,13 +67,24 @@ services:
       MYSQL_USER: app
       MYSQL_PASSWORD: app
 
-    # 永続化領域。storage/db に実ファイルが置かれる
     volumes:
-      - ./storage/db:/var/lib/mysql
+      # bind mount: ホストの storage/db。make down / make clean では消えない。WSL では権限・性能のトラブルが出ることがある。
+      # - ./storage/db:/var/lib/mysql
+      #
+      # named volume: Docker 管理。make down では残る。make clean（--volumes）や make disintegrate、docker volume prune では消える。
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
 
     # ※ 3306 を外に公開しておくと、TablePlus / Workbench などから接続できる
     # ports:
     #   - "3306:3306"   # ← デフォルトでは閉じておく
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
     networks:
       - appnet
@@ -97,4 +114,7 @@ services:
 networks:
   appnet:
     driver: bridge
+
+volumes:
+  mysql_data:
 

@@ -23,18 +23,19 @@ composer create-project gallu/docker-app-skeleton [my-app-name]
 ```
 /
 ├─ docker-compose.yml
+├─ .env.sample
 ├─ docker/
 │   ├─ nginx/
 │   │   ├─ Dockerfile
 │   │   └─ default.conf
 │   ├─ php/
-│   │   └─ Dockerfile
-│   ├─ mysql/
-│   │   └─ Dockerfile（必要に応じて配置）
-│   └─ redis/
-│       └─ Dockerfile（必要に応じて配置）
+│   │   ├─ Dockerfile
+│   │   └─ php.ini
+│   └─ mysql/
+│       └─ init/
+│           └─ init.sql
 ├─ storage/
-│   ├─ db/
+│   ├─ db/          # bind mount に切り替えたときに使用
 │   └─ logs/
 ├─ src/
 │   └─ public/
@@ -42,6 +43,8 @@ composer create-project gallu/docker-app-skeleton [my-app-name]
 └─ scripts/
     └─ setup.sh
 ```
+
+MySQL / Redis は公式イメージを compose の `image:` で使います。PHP / nginx だけ Dockerfile があります。
 
 ---
 
@@ -53,7 +56,16 @@ composer create-project gallu/docker-app-skeleton [my-app-name]
 sh ./scripts/setup.sh
 ```
 
-### 2. 例えば Laravel を使う場合
+### 2. 環境変数ファイルの作成
+
+```
+cp .env.sample .env
+```
+
+`.env` の `COMPOSE_PROJECT_NAME` と `WEB_PORT` を、必要に応じて変更してください。  
+`WEB_PORT` が未設定だと `docker compose` はエラーになります。
+
+### 3. 例えば Laravel を使う場合
 
 `src/` 配下に Laravel をインストールする例です。
 
@@ -64,6 +76,17 @@ composer create-project laravel/laravel .
 
 その後、`src/public/` が Web root として nginx から参照されます。
 
+アプリ側の接続例（Laravel の `.env` など）:
+
+- `DB_HOST=mysql`
+- `DB_DATABASE=app`
+- `DB_USERNAME=app`
+- `DB_PASSWORD=app`
+- `REDIS_HOST=redis`
+- `APP_URL=http://localhost:<WEB_PORT>`
+
+テスト用 DB は `app_testing` です。`DB_USERNAME=app` / `DB_PASSWORD=app` で入れます。
+
 ---
 
 ## 起動
@@ -72,17 +95,23 @@ composer create-project laravel/laravel .
 docker compose up --build -d
 ```
 
+または `make up`。
+
 ## 停止
 
 ```
 docker compose down
 ```
 
+または `make down`。named volume `mysql_data` は消えません。
+
 ## PHP へのアクセス
 
 ```
-http://localhost:8080/
+http://localhost:<WEB_PORT>/
 ```
+
+`<WEB_PORT>` は `.env` で設定した値です。
 
 ---
 
@@ -91,6 +120,17 @@ http://localhost:8080/
 ```
 docker compose exec mysql bash
 mysql -u root -p
+```
+
+root のパスワードは `root` です。アプリから繋ぐ場合は `app` / `app` を使ってください。
+
+通常の DB は `app`、テスト用 DB は `app_testing` です。  
+`app_testing` は named volume が空の **初回起動時** に `docker/mysql/init/init.sql` で作成します。公式イメージは datadir が空のときだけ `/docker-entrypoint-initdb.d` を実行します。コンテナを作り直すたびに走るわけではありません。
+
+既存の volume がある環境では、次を一度だけ実行してください。
+
+```bash
+docker compose exec mysql mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS app_testing; GRANT ALL PRIVILEGES ON app_testing.* TO 'app'@'%';"
 ```
 
 ---
@@ -105,8 +145,8 @@ src/public/test_mysql.php:
 try {
     $pdo = new PDO(
         'mysql:host=mysql;dbname=app;charset=utf8mb4',
-        'root',
-        'rootpassword',
+        'app',
+        'app',
         [ PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION ]
     );
 
@@ -141,7 +181,9 @@ echo "PING: " . $redis->ping();
 
 ### down
 現在の docker-compose プロジェクトで起動中のコンテナを停止し、ネットワークを削除します。
-永続化ボリュームは削除しません。
+named volume `mysql_data` は削除しません。
+
+`make down` のあとに `docker volume prune` を実行すると、未使用になった `mysql_data` は消えることがあります。
 
     make down
 
@@ -151,7 +193,7 @@ echo "PING: " . $redis->ping();
 - コンテナ
 - ネットワーク
 - このプロジェクト内でビルドされたイメージ
-- このプロジェクト内で作成されたボリューム
+- このプロジェクト内で作成されたボリューム（named volume `mysql_data` を含む）
 
 他プロジェクトには影響しません。
 
@@ -165,7 +207,7 @@ Docker 全体に対して `docker system prune -f` を実行します。
 - 参照されていないイメージ
 - Build キャッシュ
 
-複数の Docker プロジェクトを扱っている場合は注意してください。
+ボリュームは削除しません。複数の Docker プロジェクトを扱っている場合は注意してください。
 
     make all-clean
 
@@ -175,7 +217,7 @@ Docker 全体に対して最も強力なクリーンアップを実行します�
 - 停止中のすべてのコンテナ
 - 未使用のネットワーク
 - 未使用のイメージ（すべて）
-- 未使用のボリューム（すべて）
+- 未使用のボリューム（すべて、named volume `mysql_data` を含む）
 
 Docker のあらゆる不要データを削除しますが、他プロジェクトのデータも含めて完全に消去されます。
 慎重に利用してください。
@@ -221,4 +263,10 @@ Docker の bind mount を利用している場合、ホスト側とコンテナ�
 ## 注意事項
 
 - `src/` は .gitignore 対象です。任意のアプリケーションを配置してください。
-- `storage/` は永続化領域です（DB・ログなど）。
+- 既定の DB 置き場は named volume `mysql_data` です。`storage/` はログ等です。既定では DB ファイルを置きません。
+- bind mount（`./storage/db`）に戻す手順:
+  1. `docker-compose.yml`: `./storage/db:/var/lib/mysql` のコメントを外し、`mysql_data:/var/lib/mysql` をコメントアウトする。末尾の `volumes: mysql_data` も使わない。
+  2. `scripts/setup.sh`: `mkdir -p storage/db` のコメントを外す。
+  3. `.gitignore` の `/storage/db/` ルールはそのまま。
+- 切替時、named volume の中身は `storage/db` に自動移行しません。
+- bind mount に戻すと `make clean` でも `storage/db` は残ります。
