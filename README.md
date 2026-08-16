@@ -183,6 +183,41 @@ Docker のあらゆる不要データを削除しますが、他プロジェク�
     make disintegrate
 
 ---
+
+## Composer 実行時の「detected dubious ownership」について
+
+このプロジェクトでは、Docker コンテナ内で `composer` を実行すると、次のエラーが表示される場合があります。
+
+    fatal: detected dubious ownership in repository at '/var/www/html'
+    To add an exception for this directory, call:
+        git config --global --add safe.directory /var/www/html
+
+### 解決方法（Git が公式に提示している対処法）
+
+Git がメッセージ内で指示しているとおり、次のコマンドをコンテナ内で実行してください。
+
+    git config --global --add safe.directory /var/www/html
+
+これにより、Git が `/var/www/html` を “安全なディレクトリ” と認識し、エラーが解消されます。
+
+### なぜ発生するのか
+
+Git には「所有者が異なるディレクトリを安全とみなさない」仕様があります。  
+Docker の bind mount を利用している場合、ホスト側とコンテナ側で UID/GID が異なるため、Git が `/var/www/html` を “safe” と判断しません。
+
+これは Git 自身の仕様であり、Docker bind mount を使う環境では一般的に発生します。
+
+参考：
+- `git help safe.directory` に Docker bind mount の例示があります。
+- Docker bind mount は UID/GID を変換しません（Docker 公式ドキュメント）。
+
+### 補足：Composer の挙動について
+
+`composer.lock` が存在しない場合、Composer は `install` を実行しても内部的に `update` を実行します（Composer 公式ドキュメントによる仕様）。  
+そのため、最初に `composer install` を実行した際は `update` と同様の動作になります。
+
+---
+
 ## 注意事項
 
 - `src/` は .gitignore 対象です。任意のアプリケーションを配置してください。
