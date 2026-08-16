@@ -4,7 +4,9 @@ echo "=== Initializing project directories ==="
 
 # ---- 1. create directories ----
 mkdir -p src
-mkdir -p storage/db
+# MySQLをホストの storage/db に置く（compose の bind mount を使う）場合に必要。
+# 既定は named volume のため作成しない。
+# mkdir -p storage/db
 mkdir -p storage/logs
 mkdir -p storage/cache
 
