@@ -1,7 +1,7 @@
 # Docker App Skeleton
 
 開発用のシンプルな Docker ベース環境です。  
-PHP（php-fpm）・nginx・MySQL・Redis を含む基本構成を提供し、  
+PHP（php-fpm）・nginx・MySQL・PostgreSQL・Redis を含む基本構成を提供し、  
 任意の PHP フレームワーク（Laravel / Slim / Plain PHP など）を `src/` に配置して利用できます。
 
 このリポジトリは、自分用の開発テンプレートとして作成したものです。
@@ -18,6 +18,21 @@ composer create-project gallu/docker-app-skeleton [my-app-name]
 
 ---
 
+## ミドルウェアのバージョン
+
+2026-08-16 現在。
+
+| ミドルウェア | バージョン |
+|---|---|
+| PHP | 8.5 |
+| nginx | 1.31 |
+| MySQL | 9.7 |
+| PostgreSQL | 18 |
+| Redis | 7 |
+| Composer | 2 |
+
+---
+
 ## 構成
 
 ```
@@ -31,12 +46,14 @@ composer create-project gallu/docker-app-skeleton [my-app-name]
 │   ├─ php/
 │   │   ├─ Dockerfile
 │   │   └─ php.ini
-│   └─ mysql/
+│   ├─ mysql/
+│   │   └─ init/
+│   │       └─ init.sql
+│   └─ postgres/
 │       └─ init/
 │           └─ init.sql
 ├─ storage/
-│   ├─ db/          # bind mount に切り替えたときに使用
-│   └─ logs/
+│   └─ logs/        # 既定はログ等。DB ファイルは置かない
 ├─ src/
 │   └─ public/
 │        └─ index.php
@@ -44,7 +61,17 @@ composer create-project gallu/docker-app-skeleton [my-app-name]
     └─ setup.sh
 ```
 
-MySQL / Redis は公式イメージを compose の `image:` で使います。PHP / nginx だけ Dockerfile があります。
+MySQL / PostgreSQL / Redis は公式イメージを compose の `image:` で使います。PHP / nginx だけ Dockerfile があります。
+
+DB の起動対象は Compose profiles です。
+
+- `make up` … MySQL + PostgreSQL
+- `make up-mysql` … MySQL のみ
+- `make up-pg` … PostgreSQL のみ
+
+nginx / php / redis はどの起動でも立ち上がります。`up-mysql` / `up-pg` は、起動しない方の DB コンテナを明示的に止めます。named volume のデータは残ります。
+
+`docker compose up` だけでは MySQL / PostgreSQL は起動しません（Compose profiles のため）。起動・停止は `make up` / `make up-mysql` / `make up-pg` / `make down` を使ってください。
 
 ---
 
@@ -78,32 +105,64 @@ composer create-project laravel/laravel .
 
 アプリ側の接続例（Laravel の `.env` など）:
 
+MySQL を使う場合:
+
+- `DB_CONNECTION=mysql`
 - `DB_HOST=mysql`
+- `DB_PORT=3306`
 - `DB_DATABASE=app`
 - `DB_USERNAME=app`
 - `DB_PASSWORD=app`
+
+PostgreSQL を使う場合:
+
+- `DB_CONNECTION=pgsql`
+- `DB_HOST=postgres`
+- `DB_PORT=5432`
+- `DB_DATABASE=app`
+- `DB_USERNAME=app`
+- `DB_PASSWORD=app`
+
+共通:
+
 - `REDIS_HOST=redis`
 - `APP_URL=http://localhost:<WEB_PORT>`
 
-テスト用 DB は `app_testing` です。`DB_USERNAME=app` / `DB_PASSWORD=app` で入れます。
+テスト用 DB はどちらも `app_testing` です。`DB_USERNAME=app` / `DB_PASSWORD=app` で入れます。
 
 ---
 
 ## 起動
 
+両方の DB:
+
 ```
-docker compose up --build -d
+make up
 ```
 
-または `make up`。
+MySQL のみ:
+
+```
+make up-mysql
+```
+
+PostgreSQL のみ:
+
+```
+make up-pg
+```
+
+PHP イメージを変えたあとは `--build` が必要です。Make の up 系は `--build` 付きです。
+
+`docker compose up` や `docker compose down` を直接使うと、profiles 付きの DB が対象から外れます。
 
 ## 停止
 
 ```
-docker compose down
+make down
 ```
 
-または `make down`。named volume `mysql_data` は消えません。
+named volume `mysql_data` / `postgres_data` は消えません。
 
 ## PHP へのアクセス
 
@@ -118,7 +177,7 @@ http://localhost:<WEB_PORT>/
 ## MySQL
 
 ```
-docker compose exec mysql bash
+make exec-mysql
 mysql -u root -p
 ```
 
@@ -132,6 +191,31 @@ root のパスワードは `root` です。アプリから繋ぐ場合は `app` 
 ```bash
 docker compose exec mysql mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS app_testing; GRANT ALL PRIVILEGES ON app_testing.* TO 'app'@'%';"
 ```
+
+`mysql:8.0` の volume を `mysql:9.7` に載せ替える想定はありません。作り直す場合は `make clean` のあと `make up`（または `make up-mysql`）です。
+
+---
+
+## PostgreSQL
+
+```
+make exec-pg
+psql -U postgres
+```
+
+スーパーユーザーは公式イメージどおり `postgres`、パスワードは `root` です。アプリから繋ぐ場合は `app` / `app` を使ってください。
+
+通常の DB は `app`、テスト用 DB は `app_testing` です。どちらも named volume が空の **初回起動時** に `docker/postgres/init/init.sql` で作成し、オーナーは `app` です。公式イメージは datadir が空のときだけ `/docker-entrypoint-initdb.d` を実行します。
+
+既存の volume がある環境では、次を一度だけ実行してください。
+
+```bash
+docker compose exec postgres psql -U postgres -c "CREATE USER app WITH PASSWORD 'app';"
+docker compose exec postgres psql -U postgres -c "CREATE DATABASE app OWNER app;"
+docker compose exec postgres psql -U postgres -c "CREATE DATABASE app_testing OWNER app;"
+```
+
+PostgreSQL 18 の named volume は `/var/lib/postgresql` にマウントします（17 以前の `/var/lib/postgresql/data` ではない）。
 
 ---
 
@@ -156,9 +240,32 @@ try {
 }
 ```
 
+## PHP → PostgreSQL 接続例
+
+src/public/test_pgsql.php:
+
+```php
+<?php
+
+try {
+    $pdo = new PDO(
+        'pgsql:host=postgres;dbname=app',
+        'app',
+        'app',
+        [ PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION ]
+    );
+
+    echo "OK: Connected to PostgreSQL\n";
+} catch (PDOException $e) {
+    echo "NG: " . $e->getMessage();
+}
+```
+
 ---
 
 ## Redis
+
+アプリからはコンテナ名 `redis` の 6379 に接続します。ホストへのポート公開は MySQL / PostgreSQL と同様、デフォルトでは閉じています。
 
 ```php
 <?php
@@ -175,15 +282,25 @@ echo "PING: " . $redis->ping();
 以下は各コマンドの動作内容と注意点です。
 
 ### up
-コンテナ群をバックグラウンドで起動します。必要に応じてビルドも実行します。
+MySQL と PostgreSQL の両方を含むコンテナ群をバックグラウンドで起動します。必要に応じてビルドも実行します。
 
     make up
 
+### up-mysql
+MySQL のみ（＋ nginx / php / redis）を起動します。動いていた PostgreSQL コンテナは止めます。`postgres_data` は消えません。
+
+    make up-mysql
+
+### up-pg
+PostgreSQL のみ（＋ nginx / php / redis）を起動します。動いていた MySQL コンテナは止めます。`mysql_data` は消えません。
+
+    make up-pg
+
 ### down
 現在の docker-compose プロジェクトで起動中のコンテナを停止し、ネットワークを削除します。
-named volume `mysql_data` は削除しません。
+named volume `mysql_data` / `postgres_data` は削除しません。
 
-`make down` のあとに `docker volume prune` を実行すると、未使用になった `mysql_data` は消えることがあります。
+`make down` のあとに `docker volume prune` を実行すると、未使用になった named volume は消えることがあります。
 
     make down
 
@@ -193,11 +310,18 @@ named volume `mysql_data` は削除しません。
 - コンテナ
 - ネットワーク
 - このプロジェクト内でビルドされたイメージ
-- このプロジェクト内で作成されたボリューム（named volume `mysql_data` を含む）
+- このプロジェクト内で作成されたボリューム（named volume `mysql_data` / `postgres_data` を含む）
 
 他プロジェクトには影響しません。
 
     make clean
+
+### exec-php / exec-mysql / exec-pg
+各コンテナに入ります。
+
+    make exec-php
+    make exec-mysql
+    make exec-pg
 
 ### all-clean
 Docker 全体に対して `docker system prune -f` を実行します。
@@ -217,7 +341,7 @@ Docker 全体に対して最も強力なクリーンアップを実行します�
 - 停止中のすべてのコンテナ
 - 未使用のネットワーク
 - 未使用のイメージ（すべて）
-- 未使用のボリューム（すべて、named volume `mysql_data` を含む）
+- 未使用のボリューム（すべて、named volume `mysql_data` / `postgres_data` を含む）
 
 Docker のあらゆる不要データを削除しますが、他プロジェクトのデータも含めて完全に消去されます。
 慎重に利用してください。
@@ -263,10 +387,14 @@ Docker の bind mount を利用している場合、ホスト側とコンテナ�
 ## 注意事項
 
 - `src/` は .gitignore 対象です。任意のアプリケーションを配置してください。
-- 既定の DB 置き場は named volume `mysql_data` です。`storage/` はログ等です。既定では DB ファイルを置きません。
-- bind mount（`./storage/db`）に戻す手順:
+- 既定の DB 置き場は named volume `mysql_data` / `postgres_data` です。`storage/` はログ等です。既定では DB ファイルを置きません。
+- MySQL を bind mount（`./storage/db`）に戻す手順:
   1. `docker-compose.yml`: `./storage/db:/var/lib/mysql` のコメントを外し、`mysql_data:/var/lib/mysql` をコメントアウトする。末尾の `volumes: mysql_data` も使わない。
   2. `scripts/setup.sh`: `mkdir -p storage/db` のコメントを外す。
   3. `.gitignore` の `/storage/db/` ルールはそのまま。
-- 切替時、named volume の中身は `storage/db` に自動移行しません。
-- bind mount に戻すと `make clean` でも `storage/db` は残ります。
+- PostgreSQL を bind mount（`./storage/pg`）にする手順:
+  1. `docker-compose.yml`: `./storage/pg:/var/lib/postgresql` のコメントを外し、`postgres_data:/var/lib/postgresql` をコメントアウトする。末尾の `volumes: postgres_data` も使わない。マウント先は `/var/lib/postgresql`（`/data` ではない）。
+  2. `scripts/setup.sh`: `mkdir -p storage/pg` のコメントを外す。
+  3. `.gitignore` の `/storage/pg/` ルールはそのまま。
+- 切替時、named volume の中身は `storage/db` / `storage/pg` に自動移行しません。
+- bind mount に戻すと `make clean` でもホスト側ディレクトリは残ります。
