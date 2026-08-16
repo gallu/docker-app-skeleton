@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     libfreetype-dev \
     libicu-dev \
     libxml2-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ===== PHP拡張 =====
@@ -20,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 RUN docker-php-ext-install \
     bcmath pcntl exif calendar sockets \
     sysvmsg sysvsem sysvshm intl gmp \
-    pdo_mysql zip
+    pdo_mysql pdo_pgsql zip
 
 # ===== GD =====
 RUN docker-php-ext-configure gd \

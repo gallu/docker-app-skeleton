@@ -9,10 +9,13 @@
 # ============================================
 # 2) ストレージ領域（永続化）
 # ============================================
-# bind mount に切り替えたとき、storage/db の中身をコミットしないため残す。
-# 既定の永続化は named volume mysql_data。
+# bind mount に切り替えたとき、storage/db と storage/pg の中身をコミットしないため残す。
+# 既定の永続化は named volume mysql_data / postgres_data。
 /storage/db/*
 !/storage/db/
+
+/storage/pg/*
+!/storage/pg/
 
 /storage/logs/*
 !/storage/logs/
