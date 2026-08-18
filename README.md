@@ -89,7 +89,10 @@ sh ./scripts/setup.sh
 cp .env.sample .env
 ```
 
-`.env` の `COMPOSE_PROJECT_NAME` と `WEB_PORT` を、必要に応じて変更してください。  
+Compose のプロジェクト名を明示する場合は、`.env` の `COMPOSE_PROJECT_NAME` をアンコメントして任意の名前に変更してください。
+
+`.env` の `WEB_PORT` は、必要に応じて変更してください。
+
 `WEB_PORT` が未設定だと `docker compose` はエラーになります。
 
 ### 3. 例えば Laravel を使う場合
