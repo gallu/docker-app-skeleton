@@ -18,10 +18,11 @@ services:
     # docker/nginx/Dockerfile を使用
     build: ./docker/nginx
 
-    # "localhost:${WEB_PORT}" → "コンテナ内の 80 番" に接続
+    # 既定はローカルホストのみ公開。外部公開時は既存の行をコメントアウトしてから下の行を有効化する。
     # WEB_PORT は .env で必須（未設定ならエラー）
     ports:
-      - "${WEB_PORT:?WEB_PORT is not set. Copy .env.sample to .env}:80"
+      - "127.0.0.1:${WEB_PORT:?WEB_PORT is not set. Copy .env.sample to .env}:80"
+      # - "${WEB_PORT:?WEB_PORT is not set. Copy .env.sample to .env}:80" # 全インターフェース公開
 
     # src/ が Web ルート（/var/www/html）としてマウントされる
     # public/ がサーバルートになる（default.conf の指定）
