@@ -5,6 +5,7 @@ PHP（php-fpm）・nginx・MySQL・PostgreSQL・Redis を含む基本構成を�
 任意の PHP フレームワーク（Laravel / Slim / Plain PHP など）を `src/` に配置して利用できます。
 
 このリポジトリは、自分用の開発テンプレートとして作成したものです。
+開発用の skeleton であり、そのまま本番運用に適するとは限りません。
 
 ---
 
@@ -69,7 +70,7 @@ DB の起動対象は Compose profiles です。
 - `make up-mysql` … MySQL のみ
 - `make up-pg` … PostgreSQL のみ
 
-nginx / php / redis はどの起動でも立ち上がります。`up-mysql` / `up-pg` は、起動しない方の DB コンテナを明示的に止めます。named volume のデータは残ります。
+nginx / php / redis はどの起動でも立ち上がります。`up-mysql` / `up-pg` は、使わない方の DB コンテナを停止状態で保持します。コンテナは削除せず、named volume のデータも残ります。初回起動など停止対象のコンテナがない場合も起動できます。
 
 `docker compose up` だけでは MySQL / PostgreSQL は起動しません（Compose profiles のため）。起動・停止は `make up` / `make up-mysql` / `make up-pg` / `make down` を使ってください。
 
@@ -94,6 +95,8 @@ Compose のプロジェクト名を明示する場合は、`.env` の `COMPOSE_P
 `.env` の `WEB_PORT` は、必要に応じて変更してください。
 
 `WEB_PORT` が未設定だと `docker compose` はエラーになります。
+
+nginx のポートは既定で `127.0.0.1:<WEB_PORT>` にバインドされ、ホスト自身からのみアクセスできます。外部からアクセスさせる場合は、`docker-compose.yml` の nginx の `ports` で `127.0.0.1:` から始まる行をコメントアウトしてから、直下の全インターフェース公開用の行を有効にしてください。両方の行を同時に有効にしないでください。外部公開時は Docker のポート公開範囲とファイアウォール設定に注意してください。
 
 ### 3. 例えば Laravel を使う場合
 
@@ -290,12 +293,12 @@ MySQL と PostgreSQL の両方を含むコンテナ群をバックグラウン�
     make up
 
 ### up-mysql
-MySQL のみ（＋ nginx / php / redis）を起動します。動いていた PostgreSQL コンテナは止めます。`postgres_data` は消えません。
+MySQL のみ（＋ nginx / php / redis）を起動します。動いていた PostgreSQL コンテナは削除せず停止状態で保持します。`postgres_data` は消えません。
 
     make up-mysql
 
 ### up-pg
-PostgreSQL のみ（＋ nginx / php / redis）を起動します。動いていた MySQL コンテナは止めます。`mysql_data` は消えません。
+PostgreSQL のみ（＋ nginx / php / redis）を起動します。動いていた MySQL コンテナは削除せず停止状態で保持します。`mysql_data` は消えません。
 
     make up-pg
 
